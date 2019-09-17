@@ -17,51 +17,70 @@ Description:
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netdb.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <time.h>
 
 #define MAXLINE 1024 // max text length for echo
 #define SERV_PORT 10010 // required port number
 
 int main(int argc, char **argv) {
 	int dataSocket, n;
+	struct hostent* serverHost;
 	socklen_t serverLength;
+	struct timeval sendTime, recvTime;
+	long RTT;
 	struct sockaddr_in serverSocketAddress;
 	char sendMessage[MAXLINE], recieveMessage[MAXLINE];
 	
 	/* Argument check */
 	if (argc != 2) {
-		perror("Usage: TCPClient <IP address of the server");
+		perror("Usage: ./clientName 'Host name of the server'");
 		exit(1);
+	}
+
+	/* Extract IP from Hostname */
+	if ((serverHost = gethostbyname(argv[1])) == 0) {
+		perror("Please enter a valid host name.");
+		exit(2);
 	}
 	
 	/* Create the clientSocket */
 	if ((dataSocket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
 		perror("There was a problem creating the socket.");
-		exit(2);
+		exit(3);
 	}
 	memset(&serverSocketAddress, 0, sizeof(serverSocketAddress));
 	serverSocketAddress.sin_family = AF_INET;
-	serverSocketAddress.sin_addr.s_addr = inet_addr(argv[1]); // Convert number_dot string to binary
+	serverSocketAddress.sin_addr.s_addr = inet_addr(inet_ntoa(*((struct in_addr*) serverHost->h_addr_list[0]))); // Convert number_dot string to binary
 	serverSocketAddress.sin_port = htons(SERV_PORT); // Host byte order -> Network byte order
 	serverLength = sizeof(serverSocketAddress);
 	
 	printf ("%s", "Please enter a string to send to the server: ");
 	scanf("\n%[^\n]", sendMessage);
 	
-	/* Send the data */
+	/* Send the data; clock the start time to milliseconds*/
 	if (n = sendto(dataSocket, sendMessage, strlen(sendMessage), 0, (struct sockaddr *) &serverSocketAddress, serverLength) < 0) {
 		perror("Message send error");
-		exit(3);
+		exit(4);
 	}
+	gettimeofday(&sendTime, NULL);
 
+	/* Recieve the data; clock the recieve time to milliseonds; calculate RTT */
 	if (n = recvfrom(dataSocket, recieveMessage, MAXLINE, 0, (struct sockaddr *) &serverSocketAddress, &serverLength) < 0) {
 		perror("The server terminated prematurely.");
 		exit(4);
 	}
+	gettimeofday(&recvTime, NULL);
+	RTT = (recvTime.tv_sec - sendTime.tv_sec) * 1000L + (recvTime.tv_usec - sendTime.tv_usec) / 1000;
 	
+	/* Output results */
 	printf("%s", "String recieved from the server: ");
-	printf("%s\n", recieveMessage);	
+	printf("%s\n", recieveMessage);
+	printf("%s", "Round Trip Time: ");
+	printf("%ld", RTT);
+	printf("%s\n", " milliseconds");
 	
 	return(0);
 }
