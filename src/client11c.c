@@ -151,8 +151,8 @@ int main(int argc, char **argv) {
 	}
 	memset(&serverSocketAddress, 0, sizeof(serverSocketAddress));
 	serverSocketAddress.sin_family = AF_INET;
-	serverSocketAddress.sin_addr.s_addr = inet_addr(inet_ntoa(*((struct in_addr*) serverHost->h_addr_list[0]))); // Convert number_dot string to binary
-	serverSocketAddress.sin_port = htons(SERV_PORT); // Host byte order -> Network byte order
+	serverSocketAddress.sin_addr.s_addr = inet_addr(inet_ntoa(*((struct in_addr*) serverHost->h_addr_list[0])));
+	serverSocketAddress.sin_port = htons(SERV_PORT);
 	serverLength = sizeof(serverSocketAddress);
 	
 	/* Initialize all missingEchos to 0; i.e, all echos are missing before send */

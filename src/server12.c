@@ -15,108 +15,119 @@ Description:
 #include <sys/socket.h>
 #include <netinet/in.h>
 
+#define REQUEST_LENGTH 9
+#define RESPONSE_LENGTH 14
+
+/* Global Variables */
+char requestMessage[9], responseMessage[14], operationCode, isAnswerValid;
+unsigned int operandA, operandB, answer;
+
+void updatePacket() {
+	memcpy(responseMessage + sizeof(char) + sizeof(unsigned int) + sizeof(unsigned int), &answer, sizeof(unsigned int));
+	memcpy(responseMessage + sizeof(char) + sizeof(unsigned int) + sizeof(unsigned int) + sizeof(unsigned int), &isAnswerValid, sizeof(char));
+}
+
+void deconstructPacket() {
+	memcpy(&operationCode, requestMessage, sizeof(char));
+	memcpy(&operandA, requestMessage + sizeof(char), sizeof(unsigned int));
+	memcpy(&operandB, requestMessage + sizeof(char) + sizeof(unsigned int), sizeof(unsigned int));
+}
+
+void calculateAnswer() {
+	if (operandB == 0 && operationCode == '/') {
+		isAnswerValid = '2';
+		answer = 0;
+	}
+	else {
+		isAnswerValid = '1';
+		switch(operationCode) {
+		case '+':
+			answer = operandA  + operandB;
+			break;
+		case '-':
+			answer = operandA - operandB;
+			break;
+		case 'x':
+			answer = operandA * operandB;
+			break;
+		case '/':
+			answer = operandA / operandB;
+			break;
+		}
+	}
+}
+
 int main(int argc, char *argv[]) {
+	int listenSocket, dataSocket, port, n;
+	struct sockaddr_in serverSocketAddress, clientSocketAddress;
+	socklen_t clientLength;
+	pid_t pid;
 
+	/* Argument check */
+	if (argc < 2) {
+		perror("Usage: ./server12 'Port Number'");
+		exit(1);
+	}
 
-//check for port number from client
+	/* Create the socket */
+	if ((listenSocket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+		perror("Problem creating the socket");
+		exit(2);
+	}
+	memset(&serverSocketAddress, 0, sizeof(serverSocketAddress));
+	memset(&clientSocketAddress, 0, sizeof(clientSocketAddress)); 
+	port = atoi(argv[1]);
+	serverSocketAddress.sin_family = AF_INET;
+	serverSocketAddress.sin_addr.s_addr = INADDR_ANY;
+	serverSocketAddress.sin_port = htons(port);
 
-if (argc < 2) {
-	printf("%s", "No port number provided\n");
-	exit(1);
-}
-
-int sockfd, newsockfd, portnumber, n;
-char buffer[255];
-int num1, num2, ans, choice;
-struct sockaddr_in serv_addr, cli_addr;
-socklen_t clilen;
-
-sockfd = socket(AF_INET, SOCK_STREAM, 0);
-
-if (sockfd < 0) {
-	printf("%s", "Could not open socket.");
-}
-//clears any data that it is referenced to
-bzero((char *) &serv_addr, sizeof(serv_addr));
-
-portnumber = atoi(argv[1]);
-
-serv_addr.sin_family = AF_INET;
-serv_addr.sin_addr.s_addr = INADDR_ANY;
-serv_addr.sin_port = htons(portnumber); //conversion
-
-//now bind
-if(bind(sockfd, (struct sockaddr *) &serv_addr , sizeof(serv_addr)) < 0) {
-	printf("%s", "Could not bind socket");
-}
-
-listen(sockfd, 5); //5 is max limit that can connect at one time
-clilen = sizeof(cli_addr);
-
-//accept
-
-newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
-
-if (newsockfd < 0) {
-	printf("%s", "Error could not accept");
-}
-
-
-n = write(newsockfd, "Enter fist number: ", strlen("Enter first number"));
-
-if (n < 0) {
-	printf("%s", "Error, can't write to socket");
-}
-
-read(newsockfd, &num1, sizeof(int));
-printf("Client - Number 1 is %d\n", num1);
-
-
-n = write(newsockfd, "Enter second number: ", strlen("Enter second number"));
-
-if (n < 0) {
-	printf("%s", "Error, can't write to socket");
-}
-
-read(newsockfd, &num2, sizeof(int));
-printf("Client - Number 2 is  %d\n", num2);;
-
-
-n = write(newsockfd, "Enter an operand: \n1.Addition(+)\n2.Subtraction(-)\n3.Multiplication(*)\n4.Division(/)\n", strlen("Enter an operand: \n1.Addition(+)\n2.Subtraction\n3.Multiplication\n4.Division(/)\n"));
-
-if (n < 0) {
-	printf("%s", "Error, can't write to socket");
-}
-
-read(newsockfd, &choice, sizeof(int));
-printf("Client - Operand is: %d\n", choice);
-
-switch(choice) {
-
-	case 1:
-		ans = num1  + num2;
-		break;
+	/* Bind the listenSocket to the server & begin listening; set maximum number of connected hosts */
+	if (bind(listenSocket, (struct sockaddr *) &serverSocketAddress , sizeof(serverSocketAddress)) < 0) {
+		perror("Problem binding the socket");
+		exit(3);
+	}
+	listen(listenSocket, 5);
 	
-	case 2:
-		ans = num1 - num2;
-		break;
+	printf("%s\n", "Server running... waiting for connections.");
 
-	case 3:
-		ans = num1 * num2;
-		break;
-
-	case 4:
-		ans = num1/num2;
-		break;
-}
-
-
-write(newsockfd, &ans, sizeof(int));
-
-
-
-close(newsockfd);
-close(sockfd);
-return 0;
-
+	for ( ; ; ) {
+		
+		/* Accept an incoming client connection */
+		clientLength = sizeof(clientSocketAddress);
+		dataSocket = accept(listenSocket, (struct sockaddr *) &clientSocketAddress, &clientLength);
+		
+		/* Concurrent connection handler */
+		if ((pid = fork()) == 0) {
+			close(listenSocket);
+			
+			/* Recieve the operation request */
+			n = recv(dataSocket, requestMessage, REQUEST_LENGTH + 1, MSG_WAITALL);
+			deconstructPacket();
+			
+			printf("\n%s", "operandA received from client: ");
+			printf("%d", operandA);
+			printf("\n%s", "operandB received from client: ");
+			printf("%d", operandB);
+			printf("\n%s", "operationCode received from client: ");
+			printf("%c", operationCode);
+			
+			calculateAnswer();
+			printf("\n%s", "The answer to the requested operation: ");
+			printf("%d\n\n", answer);
+			
+			/* Add the answer & isAnswerValid values to the responseMessage */
+			updatePacket();
+			
+			/* Send the responseMessage to the client */
+			if (n = send(dataSocket, responseMessage, RESPONSE_LENGTH + 2, 0) < 0) {
+				perror("Problem adding the packet to the buffer");
+				exit(4);
+			}
+			
+			/* Close a connected data socket; remember - server is still listening */
+			close(dataSocket);
+			exit(5);
+		}
+		close(dataSocket);
+	}
 }

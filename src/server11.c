@@ -62,8 +62,8 @@ int main (int arc, char **argv) {
 	memset(&serverSocketAddress, 0, sizeof(serverSocketAddress)); 
 	memset(&clientSocketAddress, 0, sizeof(clientSocketAddress)); 
 	serverSocketAddress.sin_family = AF_INET;
-	serverSocketAddress.sin_addr.s_addr = INADDR_ANY; // Kernel chooses source IP
-	serverSocketAddress.sin_port = htons(SERV_PORT); // Host byte order -> Network byte order
+	serverSocketAddress.sin_addr.s_addr = INADDR_ANY;
+	serverSocketAddress.sin_port = htons(SERV_PORT);
 	clientLength = sizeof(clientSocketAddress);
 
 	if (bind(dataSocket, (struct sockaddr *) &serverSocketAddress, sizeof(serverSocketAddress)) < 0) {
