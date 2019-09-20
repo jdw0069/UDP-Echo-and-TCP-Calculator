@@ -43,7 +43,7 @@ long highestRTT, lowestRTT, averageRTT, sumRTT;
 
 void createPacket() {
 	sequenceNumber = htonl(0);
-	totalMessageLength = htons(14 + strlen(string));
+	totalMessageLength = htons(15 + strlen(string));
 	memcpy(packet, &totalMessageLength, sizeof(short));
 	memcpy(packet + sizeof(short), &sequenceNumber, sizeof(int));
 	memcpy(packet + sizeof(short) + sizeof(int), &timestamp, sizeof(long));
@@ -63,7 +63,7 @@ void deconstructPacket() {
 void printMissingEchoes() {	
 	int packetsDropped = 0;
 	/* Print the string value of any missing echos */
-	printf("\n%s", "Missing echos: ");
+	printf("\n%s", "Missing echoes: ");
 	
 	int i;
 	int printed = 0;
@@ -178,7 +178,7 @@ int main(int argc, char **argv) {
 		timestamp = htobe64((sendTime.tv_sec) * 1000L + (sendTime.tv_usec) / 1000);
 
 		createPacket();
-		if (n = sendto(dataSocket, packet, PACKET_SIZE, 0, (struct sockaddr *) &serverSocketAddress, serverLength) < 0) {
+		if (n = sendto(dataSocket, packet, ntohs(totalMessageLength), 0, (struct sockaddr *) &serverSocketAddress, serverLength) < 0) {
 			perror("Message send error");
 			exit(3);
 		}

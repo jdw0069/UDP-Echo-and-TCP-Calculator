@@ -88,7 +88,7 @@ int main (int arc, char **argv) {
 
 		/* Send back to a client */
 		createPacket();
-		if (n = sendto(dataSocket, packet, sizeof(packet), 0, (struct sockaddr *) &clientSocketAddress, clientLength) < 0) {
+		if (n = sendto(dataSocket, packet, totalMessageLength, 0, (struct sockaddr *) &clientSocketAddress, sizeof(clientSocketAddress)) < 0) {
 			perror("Problem adding the packet to the buffer");
 			exit(4);
 		}
