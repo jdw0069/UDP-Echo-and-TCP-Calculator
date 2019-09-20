@@ -21,60 +21,125 @@ Description:
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <limits.h>
 
-#define MAXLINE 1024 // max text length for echo
-#define SERV_PORT 10010 // required port number
+#define MAXLINE 1024
+#define SERV_PORT 10010
+#define PACKET_SIZE 1038
 
 /* GLOBAL VARIABLES */
-int missingEchos[10000], n;
+int missingEchos[10001];
+int n, sequenceFirst, sequenceLast, sequenceNumber, dataSocket;
+double packetDropRate;
 struct timeval sendTime, recvTime;
-char numberString[6];
 socklen_t serverLength;
+long recvTimeMS, RTT, timestamp; 
+int sequenceTracker = -1;
+int sequence = -1;
 struct sockaddr_in serverSocketAddress;
+char packet[PACKET_SIZE], string[6];
+short totalMessageLength;
+long highestRTT, lowestRTT, averageRTT, sumRTT;
 
-/* Trim trailing whitespace from the recieved message */
-void trimTrailing(char * message)
-{
-    int i = 0;
-    while(message[i] != ' ' && message[i] != 0)
-    {
-        i++;
-    }
-
-    message[i + 1] = 0;
+void createPacket() {
+	sequenceNumber = htonl(0);
+	totalMessageLength = htons(14 + strlen(string));
+	memcpy(packet, &totalMessageLength, sizeof(short));
+	memcpy(packet + sizeof(short), &sequenceNumber, sizeof(int));
+	memcpy(packet + sizeof(short) + sizeof(int), &timestamp, sizeof(long));
+	memcpy(packet + sizeof(short) + sizeof(int) + sizeof(long), &string, MAXLINE);
 }
 
+void deconstructPacket() {
+	memcpy(&totalMessageLength, packet, sizeof(short));
+	totalMessageLength = ntohs(totalMessageLength);
+	memcpy(&sequenceNumber, packet + sizeof(short), sizeof(int));
+	sequenceNumber = ntohl(sequenceNumber);
+	memcpy(&timestamp, packet + sizeof(short) + sizeof(int), sizeof(long));
+	timestamp = be64toh(timestamp);
+	memcpy(&string, packet + sizeof(short) + sizeof(int) + sizeof(long), MAXLINE);
+}
+
+void printMissingEchoes() {	
+	int packetsDropped = 0;
+	/* Print the string value of any missing echos */
+	printf("\n%s", "Missing echos: ");
+	
+	int i;
+	int printed = 0;
+	for (i = 1; i < 10001; i++) {
+		if (missingEchos[i] == 0) {
+			packetsDropped++;
+			if (printed == 1) {
+				printf("%s", ", ");
+			}
+			printed = 1;
+			printf("%d", i);
+		}
+	}
+	packetDropRate = packetsDropped / (double)10000;
+}
+
+void delay(int milliseconds) 
+{ 
+    clock_t startTime = clock(); 
+    while (clock() < startTime + milliseconds);
+} 
 
 /* Process 2: Recieves & logs the response from the server; reports missing echos */
-void recieveResponse(socket, i) {
-	char recieveMessage[MAXLINE];
-	
-	/* Recieve the response from the server; clock the end time to the millisecond */
-	if (n = recvfrom(socket, recieveMessage, MAXLINE, 0, (struct sockaddr *) &serverSocketAddress, &serverLength) < 0) {
-		perror("The server terminated prematurely.");
-		exit(4);
+void recieveResponses() {
+	int i = 0;
+	int j = 0;
+	int sequencePos = 1;
+	int previousSequenceNumber = 0;
+	while (n = recvfrom(dataSocket, packet, PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *) &serverSocketAddress, &serverLength) > 0) {
+		/* Get current timestamp and get timestamp from the recv packet; calculate RTT */
+		gettimeofday(&recvTime, NULL);
+		recvTimeMS = (recvTime.tv_sec) * 1000L + (recvTime.tv_usec) / 1000;
+		deconstructPacket();
+		RTT = recvTimeMS - timestamp;
+		
+		printf("%s", "String recieved from the server: ");
+		printf("%s\n", string);
+		if (sequence == -1) {
+			sequence = 0;
+			sequenceFirst = sequenceNumber;
+			if (sequenceNumber - 10000 < UINT_MAX - 10000) {
+				sequenceLast = sequenceNumber + 10000;
+			}
+			else {
+				sequenceLast = 0 + (10000 - (UINT_MAX - sequenceNumber));
+			}
+		}
+
+		sscanf(string, "%d", &sequencePos);
+		missingEchos[sequencePos] = 1;
+		previousSequenceNumber = sequenceNumber;
+		
+		if (i == 1) {
+			lowestRTT = RTT;
+			highestRTT = RTT;
+		}
+		if (RTT > highestRTT) {
+			highestRTT = RTT;
+		}
+		else if (RTT < lowestRTT) {
+			lowestRTT = RTT;
+		}
+		sumRTT = sumRTT + RTT;
+		
+		i++;	
 	}
-	gettimeofday(&recvTime, NULL);
-	printf("%s", "String recieved from the server: ");
-	printf("%s\n", recieveMessage);
+	averageRTT = sumRTT / i;
 	
-	/* Check that the sent string matches the recieved string (check for missing echos) */
-	trimTrailing(recieveMessage);
-	numberString[snprintf(0, 0, "%+d", i) - 1] = 0;
-	if (strcmp(recieveMessage, numberString) != 0) {
-		missingEchos[i - 1] = 1;
-	} 
-	else {
-		missingEchos[i - 1] = 0;
-	}
+	printMissingEchoes();
 }
 
 /* Process 1: Sends the numbers 1 to 10000 as strings to the server & reports RTT statistics */
 int main(int argc, char **argv) {
-	int dataSocket, i, missingEcho, missingCount;
+	int i, missingEcho, missingCount;
 	struct hostent* serverHost;
-	long RTT, highestRTT, lowestRTT, averageRTT, sumRTT;
-	char sendMessage[MAXLINE];
+	struct timeval sendTime, recvTime;
 	
 	/* Argument check */
 	if (argc != 2) {
@@ -99,65 +164,41 @@ int main(int argc, char **argv) {
 	serverSocketAddress.sin_port = htons(SERV_PORT); // Host byte order -> Network byte order
 	serverLength = sizeof(serverSocketAddress);
 	
+	for (i = 0; i < 10000; i++) {
+		missingEchos[i] = 0;
+	}
+	
 	/* Send the numbers 1 to 10000 as strings */
-	sumRTT = 0;
 	for (i = 1; i <= 10000; i++) {
 		/* Cast the loop value to a string & send it to the server; clock the start time to the millisecond */
-		snprintf(numberString, sizeof(numberString), "%d", i);
-		if (n = sendto(dataSocket, numberString, strlen(numberString), 0, (struct sockaddr *) &serverSocketAddress, serverLength) < 0) {
+		snprintf(string, sizeof(string), "%d", i);
+		
+		/* Get current timestamp and format for transport */
+		gettimeofday(&sendTime, NULL);
+		timestamp = htobe64((sendTime.tv_sec) * 1000L + (sendTime.tv_usec) / 1000);
+
+		createPacket();
+		if (n = sendto(dataSocket, packet, PACKET_SIZE, 0, (struct sockaddr *) &serverSocketAddress, serverLength) < 0) {
 			perror("Message send error");
 			exit(3);
 		}
-		gettimeofday(&sendTime, NULL);
-		
-		recieveResponse(dataSocket, i);
-		
-		/* Calculate milliseconds elapsed between start & end; update RTT statistics */
-		RTT = (recvTime.tv_sec - sendTime.tv_sec) * 1000L + (recvTime.tv_usec - sendTime.tv_usec) / 1000;
-		if (i == 1) {
-			lowestRTT = RTT;
-			highestRTT = RTT;
-		}
-		if (RTT > highestRTT) {
-			highestRTT = RTT;
-		}
-		else if (RTT < lowestRTT) {
-			lowestRTT = RTT;
-		}
-		sumRTT = (double)(sumRTT + RTT);
-	}
-	averageRTT = (double)(sumRTT / 10000);
-	
-	printf("\n%s", "-------OUTPUT STATISTICS-------");
-	
-	/* Print the string value of any missing echos */
-	printf("\n%s", "Missing echos: ");
-	missingEcho = 0;
-	missingCount = 0;
-	for (i = 1; i <= 10000; i++) {
-		if (missingEchos[i - 1] == 1) {
-			if (missingEcho == 1) {
-				printf("%s", ", ");
-			}
-			printf("%d", i);
-			missingEcho = 1;
-			missingCount = 1;
-		}
-	}
-	if (missingCount == 0) {
-		printf("%s", "None");	
 	}
 	
+	recieveResponses(dataSocket);
+	
+	printf("\n%s", "-------RTT & DROP STATISTICS-------");
 	/* Print RTT statistics gathered using clockgettime() */
+	printf("\n%s", "Packet Drop Rate: %");
+	printf("%0.2f", packetDropRate * 100);
 	printf("\n%s", "Average RTT: ");
 	printf("%ld", averageRTT);
-	printf("%s\n", " milliseconds");
+	printf("%s\n", " millisecond(s)");
 	printf("%s", "Lowest RTT: ");
 	printf("%ld", lowestRTT);
-	printf("%s\n", " milliseconds");
+	printf("%s\n", " millisecond(s)");
 	printf("%s", "Highest RTT: ");
 	printf("%ld", highestRTT);
-	printf("%s\n", " milliseconds");
+	printf("%s\n", " millisecond(s)");
 	
 	return(0);
 }

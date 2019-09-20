@@ -22,17 +22,42 @@ Description:
 #include <string.h>
 #include <time.h>
 
-#define MAXLINE 1024 // max text length for echo
-#define SERV_PORT 10010 // required port number
+#define MAXLINE 1024
+#define SERV_PORT 10010
+#define PACKET_SIZE 1038
+
+/* Global Variables */
+char string[MAXLINE], packet[PACKET_SIZE];
+int sequenceNumber;
+short totalMessageLength;
+long timestamp;
+
+void createPacket() {
+	sequenceNumber = htonl(0);
+	totalMessageLength = htons(14 + strlen(string));
+	memcpy(packet, &totalMessageLength, sizeof(short));
+	memcpy(packet + sizeof(short), &sequenceNumber, sizeof(int));
+	memcpy(packet + sizeof(short) + sizeof(int), &timestamp, sizeof(long));
+	memcpy(packet + sizeof(short) + sizeof(int) + sizeof(long), &string, strlen(string));
+}
+
+void deconstructPacket() {
+	memcpy(&totalMessageLength, packet, sizeof(short));
+	totalMessageLength = ntohs(totalMessageLength);
+	memcpy(&sequenceNumber, packet + sizeof(short), sizeof(int));
+	sequenceNumber = ntohl(sequenceNumber);
+	memcpy(&timestamp, packet + sizeof(short) + sizeof(int), sizeof(long));
+	timestamp = be64toh(timestamp);
+	memcpy(&string, packet + sizeof(short) + sizeof(int) + sizeof(long), MAXLINE);
+}
 
 int main(int argc, char **argv) {
 	int dataSocket, n;
 	struct hostent* serverHost;
 	socklen_t serverLength;
 	struct timeval sendTime, recvTime;
-	long RTT;
+	long recvTimeMS, RTT;
 	struct sockaddr_in serverSocketAddress;
-	char sendMessage[MAXLINE], recieveMessage[MAXLINE];
 	
 	/* Argument check */
 	if (argc != 2) {
@@ -58,29 +83,37 @@ int main(int argc, char **argv) {
 	serverLength = sizeof(serverSocketAddress);
 	
 	printf ("%s", "Please enter a string to send to the server: ");
-	scanf("\n%[^\n]", sendMessage);
+	scanf("\n%[^\n]", string);
+	
+	/* Get current timestamp and format for transport */
+	gettimeofday(&sendTime, NULL);
+	timestamp = htobe64((sendTime.tv_sec) * 1000L + (sendTime.tv_usec) / 1000);
+	createPacket();
 	
 	/* Send the data; clock the start time to milliseconds*/
-	if (n = sendto(dataSocket, sendMessage, strlen(sendMessage), 0, (struct sockaddr *) &serverSocketAddress, serverLength) < 0) {
+	if (n = sendto(dataSocket, packet, PACKET_SIZE, 0, (struct sockaddr *) &serverSocketAddress, serverLength) < 0) {
 		perror("Message send error");
 		exit(4);
 	}
-	gettimeofday(&sendTime, NULL);
-
+	
 	/* Recieve the data; clock the recieve time to milliseonds; calculate RTT */
-	if (n = recvfrom(dataSocket, recieveMessage, MAXLINE, 0, (struct sockaddr *) &serverSocketAddress, &serverLength) < 0) {
+	if (n = recvfrom(dataSocket, packet, PACKET_SIZE, 0, (struct sockaddr *) &serverSocketAddress, &serverLength) < 0) {
 		perror("The server terminated prematurely.");
 		exit(4);
 	}
+	
+	/* Get current timestamp and get timestamp from the recv packet; calculate RTT */
 	gettimeofday(&recvTime, NULL);
-	RTT = (recvTime.tv_sec - sendTime.tv_sec) * 1000L + (recvTime.tv_usec - sendTime.tv_usec) / 1000;
+	recvTimeMS = (recvTime.tv_sec) * 1000L + (recvTime.tv_usec) / 1000;
+	deconstructPacket();
+	RTT = recvTimeMS - timestamp;
 	
 	/* Output results */
 	printf("%s", "String recieved from the server: ");
-	printf("%s\n", recieveMessage);
+	printf("%s\n", string);
 	printf("%s", "Round Trip Time: ");
 	printf("%ld", RTT);
-	printf("%s\n", " milliseconds");
+	printf("%s\n", " millisecond(s)");
 	
 	return(0);
 }

@@ -18,16 +18,42 @@ Description:
 #include <arpa/inet.h> 
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
+#include <limits.h>
 
-#define MAXLINE 1024 // max text length for echo
-#define SERV_PORT 10010 // required port number
+#define MAXLINE 1024
+#define PACKET_SIZE 1038
+#define SERV_PORT 10010
+
+/* Global Variables */
+int sequence;
+char string[MAXLINE], packet[PACKET_SIZE];
+int sequenceNumber;
+short totalMessageLength;
+long timestamp;
+
+void createPacket() {
+	sequenceNumber = htonl(sequence);
+	memcpy(packet + sizeof(short), &sequenceNumber, sizeof(int));
+}
+
+void deconstructPacket() {
+	memcpy(&totalMessageLength, packet, sizeof(short));
+	totalMessageLength = ntohs(totalMessageLength);
+	memcpy(&sequenceNumber, packet + sizeof(short), sizeof(int));
+	sequenceNumber = ntohl(sequenceNumber);
+	memcpy(&timestamp, packet + sizeof(short) + sizeof(int), sizeof(long));
+	timestamp = be64toh(timestamp);
+	memcpy(&string, packet + sizeof(short) + sizeof(int) + sizeof(long), MAXLINE);
+}
 
 int main (int arc, char **argv) {
 	int dataSocket, n;
 	socklen_t clientLength;
-	char buffer[MAXLINE]; // for send and recv data
 	struct sockaddr_in clientSocketAddress, serverSocketAddress;
 	pid_t childpid;
+
+	sequence = 0;
 	
 	/* Create the socket with error detection */
 	if ((dataSocket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -37,8 +63,9 @@ int main (int arc, char **argv) {
 	
 	/* Prepare for the socket address */
 	memset(&serverSocketAddress, 0, sizeof(serverSocketAddress)); 
+	memset(&clientSocketAddress, 0, sizeof(clientSocketAddress)); 
 	serverSocketAddress.sin_family = AF_INET;
-	serverSocketAddress.sin_addr.s_addr = htonl(INADDR_ANY); // Kernel chooses source IP
+	serverSocketAddress.sin_addr.s_addr = INADDR_ANY; // Kernel chooses source IP
 	serverSocketAddress.sin_port = htons(SERV_PORT); // Host byte order -> Network byte order
 	clientLength = sizeof(clientSocketAddress);
 
@@ -53,15 +80,25 @@ int main (int arc, char **argv) {
 	for ( ; ; ) {
 		
 		/* Recieve from a client */
-		n = recvfrom(dataSocket, buffer, MAXLINE, 0, (struct sockaddr *) &clientSocketAddress, &clientLength);
+		n = recvfrom(dataSocket, packet, PACKET_SIZE, MSG_WAITALL, (struct sockaddr *) &clientSocketAddress, &clientLength);
 		printf("%s", "String received from and resent to the client: ");
-		buffer[n] = 0; // Ending flag for the string
-		puts(buffer);
 		
+		deconstructPacket();
+		puts(string);
+
 		/* Send back to a client */
-		n = sendto(dataSocket, buffer, n, 0, (struct sockaddr *) &clientSocketAddress, clientLength);
-		buffer[0] = 0;
+		createPacket();
+		if (n = sendto(dataSocket, packet, sizeof(packet), 0, (struct sockaddr *) &clientSocketAddress, clientLength) < 0) {
+			perror("Problem adding the packet to the buffer");
+			exit(4);
+		}
+		
+		if (sequence < UINT_MAX) {
+			sequence++;
+		}
+		else {
+			sequence = 0;
+		}
 	}
-	
 	close(dataSocket);
 }
