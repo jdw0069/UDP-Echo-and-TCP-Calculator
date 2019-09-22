@@ -51,20 +51,24 @@ int main(int argc, char *argv[])
 
 	/* Argument check & assignment */
 	if (argc < 3) {
-		printf( "Usage: ./client12 'Host Name of the Server' 'Port Number'");
+		printf( "Usage: ./client12 'Host Name of the Server' 'Port Number'\n");
+		printf("%c", '\n');
 		exit(1);
+		
 	}
 	port = atoi(argv[2]);
 
 	/* Create the clientSocket */
 	if ((dataSocket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		perror("There was a problem creating the socket.");
+		printf("%c", '\n');
 		exit(2);
 	}
 
 	/* Extract IP from Hostname */
 	if ((serverHost = gethostbyname(argv[1])) == 0) {
 		perror("Please enter a valid host name.");
+		printf("%c", '\n');
 		exit(3);
 	}
 	memset(&serverSocketAddress, 0, sizeof(serverSocketAddress));
@@ -76,6 +80,7 @@ int main(int argc, char *argv[])
 	/* Establish a connection with the server */
 	if (connect(dataSocket, (struct sockaddr *) &serverSocketAddress, sizeof(serverSocketAddress)) < 0) {
 		perror("Connection failure");
+		printf("%c", '\n');
 		exit(4);
 	}
 	
@@ -100,6 +105,7 @@ int main(int argc, char *argv[])
 			break;
 		default:
 			printf ("%s\n\n", "The operationCode you entered is invalid.");
+			printf("%c", '\n');
 			exit(5);
 	}
 	
@@ -107,12 +113,14 @@ int main(int argc, char *argv[])
 	createPacket();
 	if (n = send(dataSocket, requestMessage, REQUEST_LENGTH + 1, 0) < 0) {
 			perror("Message send error");
+			printf("%c", '\n');
 			exit(6);
 	}
 	
 	/* Recieve the 14 byte packet with operation results & validity state */
 	if (n = recv(dataSocket, responseMessage, RESPONSE_LENGTH + 2, MSG_WAITALL) < 0) {
 			perror("Message recieve error");
+			printf("%c", '\n');
 			exit(7);
 	}
 	deconstructPacket();
@@ -123,6 +131,7 @@ int main(int argc, char *argv[])
 	}
 	else {
 		printf ("%s\n\n", "The requested operation is invalid.");
+		printf("%c", '\n');
 	}
 	
 	close(dataSocket);

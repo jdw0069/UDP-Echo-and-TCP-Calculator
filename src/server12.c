@@ -33,6 +33,7 @@ void deconstructPacket() {
 	memcpy(&operandB, requestMessage + sizeof(char) + sizeof(unsigned int), sizeof(unsigned int));
 }
 
+/*error check for division by zero. Set operationCode to 0 */
 void calculateAnswer() {
 	if (operandB == 0 && operationCode == '/') {
 		isAnswerValid = '2';
@@ -66,12 +67,14 @@ int main(int argc, char *argv[]) {
 	/* Argument check */
 	if (argc < 2) {
 		perror("Usage: ./server12 'Port Number'");
+		printf("%c", '\n');
 		exit(1);
 	}
 
 	/* Create the socket */
 	if ((listenSocket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		perror("Problem creating the socket");
+		printf("%c", '\n');
 		exit(2);
 	}
 	memset(&serverSocketAddress, 0, sizeof(serverSocketAddress));
@@ -84,6 +87,7 @@ int main(int argc, char *argv[]) {
 	/* Bind the listenSocket to the server & begin listening; set maximum number of connected hosts */
 	if (bind(listenSocket, (struct sockaddr *) &serverSocketAddress , sizeof(serverSocketAddress)) < 0) {
 		perror("Problem binding the socket");
+		printf("%c", '\n');
 		exit(3);
 	}
 	listen(listenSocket, 5);
@@ -121,6 +125,7 @@ int main(int argc, char *argv[]) {
 			/* Send the responseMessage to the client */
 			if (n = send(dataSocket, responseMessage, RESPONSE_LENGTH + 2, 0) < 0) {
 				perror("Problem adding the packet to the buffer");
+				printf("%c", '\n');
 				exit(4);
 			}
 			
