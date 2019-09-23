@@ -19,28 +19,43 @@ Description:
 #define RESPONSE_LENGTH 14
 
 /* Global Variables */
-char requestMessage[9], responseMessage[14], operationCode, isAnswerValid;
+char requestMessage[9], responseMessage[14], operationCode, opCode, isAnswerValid;
 unsigned int operandA, operandB, answer;
 
 void updatePacket() {
+	answer = htonl(answer);
 	memcpy(responseMessage + sizeof(char) + sizeof(unsigned int) + sizeof(unsigned int), &answer, sizeof(unsigned int));
 	memcpy(responseMessage + sizeof(char) + sizeof(unsigned int) + sizeof(unsigned int) + sizeof(unsigned int), &isAnswerValid, sizeof(char));
 }
 
 void deconstructPacket() {
-	memcpy(&operationCode, requestMessage, sizeof(char));
+	memcpy(&opCode, requestMessage, sizeof(char));
 	memcpy(&operandA, requestMessage + sizeof(char), sizeof(unsigned int));
 	memcpy(&operandB, requestMessage + sizeof(char) + sizeof(unsigned int), sizeof(unsigned int));
+	operandA = ntohl(operandA);
+	operandB = ntohl(operandB);
+	if (opCode == 43) {
+		operationCode = '+';
+	} 
+	else if (opCode == 45) {
+		operationCode = '-';
+	}
+	else if (opCode == 120) {
+		operationCode = 'x';
+	}
+	else {
+		operationCode = '/';
+	}
 }
 
 /*error check for division by zero. Set operationCode to 0 */
 void calculateAnswer() {
 	if (operandB == 0 && operationCode == '/') {
-		isAnswerValid = '2';
+		isAnswerValid = 2;
 		answer = 0;
 	}
 	else {
-		isAnswerValid = '1';
+		isAnswerValid = 1;
 		switch(operationCode) {
 		case '+':
 			answer = operandA  + operandB;
@@ -109,15 +124,13 @@ int main(int argc, char *argv[]) {
 			deconstructPacket();
 			
 			printf("\n%s", "operandA received from client: ");
-			printf("%d", operandA);
+			printf("%u", operandA);
 			printf("\n%s", "operandB received from client: ");
-			printf("%d", operandB);
+			printf("%u", operandB);
 			printf("\n%s", "operationCode received from client: ");
-			printf("%c", operationCode);
+			printf("%c\n", operationCode);
 			
 			calculateAnswer();
-			printf("\n%s", "The answer to the requested operation: ");
-			printf("%d\n\n", answer);
 			
 			/* Add the answer & isAnswerValid values to the responseMessage */
 			updatePacket();

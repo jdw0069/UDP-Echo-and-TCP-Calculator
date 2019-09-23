@@ -25,21 +25,26 @@ Description:
 #define RESPONSE_LENGTH 14
 
 /* Global variables */
-char requestMessage[REQUEST_LENGTH], responseMessage[RESPONSE_LENGTH], operationCode, isAnswerValid;
+char requestMessage[REQUEST_LENGTH], responseMessage[RESPONSE_LENGTH], operationCode, opCode, isAnswerValid;
 unsigned int operandA, operandB, answer;
 
 void createPacket() {
-	memcpy(requestMessage, &operationCode, sizeof(char));
+	operandA = htonl(operandA);
+	operandB = htonl(operandB);
+	memcpy(requestMessage, &opCode, sizeof(char));
 	memcpy(requestMessage + sizeof(char), &operandA, sizeof(unsigned int));
 	memcpy(requestMessage + sizeof(char) + sizeof(unsigned int), &operandB, sizeof(unsigned int));
 }
 
 void deconstructPacket() {
-	memcpy(&operationCode, responseMessage, sizeof(char));
+	memcpy(&opCode, responseMessage, sizeof(char));
 	memcpy(&operandA, responseMessage + sizeof(char), sizeof(unsigned int));
 	memcpy(&operandB, responseMessage + sizeof(char) + sizeof(unsigned int), sizeof(unsigned int));
 	memcpy(&answer, responseMessage + sizeof(char) + sizeof(unsigned int) + sizeof(unsigned int), sizeof(unsigned int));
 	memcpy(&isAnswerValid, responseMessage + sizeof(char) + sizeof(unsigned int) + sizeof(unsigned int) + sizeof(unsigned int), sizeof(char));
+	operandA = ntohl(operandA);
+	operandB = ntohl(operandB);
+	answer = ntohl(answer);
 }
 
 int main(int argc, char *argv[]) 
@@ -76,19 +81,12 @@ int main(int argc, char *argv[])
 	serverSocketAddress.sin_addr.s_addr = inet_addr(inet_ntoa(*((struct in_addr*) serverHost->h_addr_list[0])));
 	serverSocketAddress.sin_port = htons(port);
 	serverLength = sizeof(serverSocketAddress);
-
-	/* Establish a connection with the server */
-	if (connect(dataSocket, (struct sockaddr *) &serverSocketAddress, sizeof(serverSocketAddress)) < 0) {
-		perror("Connection failure");
-		printf("%c", '\n');
-		exit(4);
-	}
 	
 	printf ("\n%s", "Please enter operandA: ");
-	scanf("%d", &operandA);
+	scanf("%u", &operandA);
 	getchar();
 	printf ("%s", "Please enter operandB: ");
-	scanf("%d", &operandB);
+	scanf("%u", &operandB);
 	getchar();
 	printf ("%s", "Please enter an operationCode (+, -, x, or /): ");
 	scanf("%c", &operationCode);
@@ -96,17 +94,27 @@ int main(int argc, char *argv[])
 	/* Switch case for use at later time maybe? Currently handles invalid operationCode entries only */
 	switch(operationCode) {
 		case '+':
+			opCode = 43;
 			break;
 		case '-':
+			opCode = 45;
 			break;
 		case 'x':
+			opCode = 120;
 			break;
 		case '/':
+			opCode = 47;
 			break;
 		default:
 			printf ("%s\n\n", "The operationCode you entered is invalid.");
-			printf("%c", '\n');
 			exit(5);
+	}
+	
+	/* Establish a connection with the server */
+	if (connect(dataSocket, (struct sockaddr *) &serverSocketAddress, sizeof(serverSocketAddress)) < 0) {
+		perror("Connection failure");
+		printf("%c", '\n');
+		exit(4);
 	}
 	
 	/* Create the 9 byte packet & send the data to the server */
@@ -125,9 +133,9 @@ int main(int argc, char *argv[])
 	}
 	deconstructPacket();
 	
-	if (isAnswerValid == '1') {
+	if (isAnswerValid == 1) {
 		printf ("%s", "Result of the requested operation: ");
-		printf ("%d\n\n", answer);
+		printf ("%u\n\n", answer);
 	}
 	else {
 		printf ("%s\n\n", "The requested operation is invalid.");
