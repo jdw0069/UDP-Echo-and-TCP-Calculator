@@ -4,7 +4,7 @@ Basic UDP and TCP network socket programming applications utilizing various sock
 ## Getting Started and Executing the Program
 To compile this program, you will need to use the standard GCC compiler that is already installed on the AU tux machines. To compile this program into an executable, please use the following command:
 ```
-gcc -o [File To Build] [File To Build].c
+gcc -o [File to Build] [File to Build].c
 ```
 
 To run the simulator, please use the following command: 
