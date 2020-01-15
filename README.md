@@ -16,9 +16,13 @@ To run the simulator, please use the following command:
 
 * Client and Server 11
 > Total Message Length (bytes): 2 bytes
+
 > Sequence Number: 4 bytes
+
 > Timestamp (ms): 8 bytes (long)
+
 > String: Variable (Up To 1024 Bytes)
+
 * Integers will use network byte order
 * The sequence number will start at 1 and will wrap around at 2^32-1
 * The timestamp is the time in milliseconds since epoch represented as a long (the difference, measured in milliseconds, between the current time and midnight, January 1, 1970 UTC)
