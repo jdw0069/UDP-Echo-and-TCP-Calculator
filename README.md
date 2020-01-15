@@ -14,7 +14,7 @@ To run the simulator, please use the following command:
 
 ## Protocol Specifications
 
-* Client and Server 11
+### UDP Client and Server
 > Total Message Length (bytes): 2 bytes
 
 > Sequence Number: 4 bytes
@@ -29,6 +29,35 @@ To run the simulator, please use the following command:
 * The string will be represented as UTF-8 characters. It can be any length up to 1024 bytes.
 * The digits in part c will be sent as a string and will not include any punctuation.
 
+### TCP Client and Server
+#### Request Message
+> Operation Code: 1 byte (‘+’ = 0x2b (43), ‘-‘ = 0x2d (45), ‘x’ = 0x78 (120), ‘/’ = 0x2f (47))
+
+> Operand A: 4 bytes (unsigned integer)
+
+> Operand B: 4 bytes (unsigned integer)
+
+* The total request message length will always be nine bytes.
+* Each operand is an unsigned 32-bit integer.
+* The standard UTF-8 character values are used to convert the operation code into a hex value (decimal equivalent given in parenthesis).
+
+#### Response Message
+> Operation Code: 1 byte (‘+’ = 0x2b (43), ‘-‘ = 0x2d (45), ‘x’ = 0x78 (120), ‘/’ = 0x2f (47))
+
+> Operand A: 4 bytes (unsigned integer)
+
+> Operand B: 4 bytes (unsigned integer)
+
+> Answer: 4 bytes (unsigned integer)
+
+> Is Answer Valid: 1 byte (1 = Valid, 2 = Invalid or NaN result)
+
+* The total response message length will always be fourteen bytes.
+* The result is an unsigned 32-bit integer.
+* Is Answer Valid will take care of NaN / divide by zero situations. (If the answer is invalid, the answer field should be set to 0).
+* The answer is unsigned, because the operands were specified as unsigned in the specifications for the lab.
+
 ## Authors
 
-* **Christopher Tillery** - *Python Programming and Software Process Expert*
+* **Christopher Tillery** - *C Programming and Lead Project Engineer*
+* **John David Watts** - *C Programming and Lead Technical Writer*
